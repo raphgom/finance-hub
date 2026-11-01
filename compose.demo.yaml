@@ -1,0 +1,36 @@
+# Demo isolada: banco, credenciais, criptografia, sessão e porta próprios.
+# Use exclusivamente scripts/demo.ps1; o banco operacional nunca é montado aqui.
+services:
+  demo-seed:
+    build:
+      context: .
+      dockerfile: Dockerfile.seed
+    environment:
+      PGHOST: db
+      FH_DEMO_MODE: isolated-demo
+    secrets: [app_password, master_key, demo_password]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    restart: "no"
+    security_opt: ["no-new-privileges:true"]
+    networks: [internal]
+  web:
+    environment:
+      FH_SESSION_COOKIE: fh_session_demo
+    depends_on:
+      demo-seed: {condition: service_completed_successfully}
+# Sobrescreve TODOS os caminhos de segredos do Compose operacional.
+# Esses arquivos são criados somente por scripts/demo.ps1.
+secrets:
+  db_password:
+    file: ./secrets/demo/db_password
+  app_password:
+    file: ./secrets/demo/app_password
+  master_key:
+    file: ./secrets/demo/master_key
+  setup_code:
+    file: ./secrets/demo/setup_code
+  backup_key:
+    file: ./secrets/demo/backup_key
+  demo_password:
+    file: ./secrets/demo/demo_password

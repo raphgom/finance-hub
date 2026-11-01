@@ -1,0 +1,48 @@
+name: CI • Finance Hub
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    name: TypeScript + testes • ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar dependências
+        run: npm install --no-audit --no-fund
+      - name: Validar tipagem, testes e build
+        run: npm run verify
+      - name: Verificação de segurança do repositório
+        run: node scripts/security-check.mjs
+  docker-demo:
+    name: Docker Compose • demo e validação real
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verificar Bash e Docker
+        run: |
+          bash -n scripts/financehub.sh
+          docker compose version
+      - name: Inicializar demo isolada
+        run: bash scripts/financehub.sh demo
+      - name: Verificar login real + API analítica
+        run: bash scripts/financehub.sh verify-demo
+      - name: Logs de falha (sem credenciais)
+        if: failure()
+        run: docker compose --ansi never -p financehub-demo -f compose.yaml -f compose.demo.yaml logs --no-color --tail=120 web migrate demo-seed db || true

@@ -1,0 +1,105 @@
+name: finance-hub
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: financehub
+      POSTGRES_USER: financehub
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U financehub -d financehub"]
+      interval: 5s
+      retries: 20
+      timeout: 3s
+    security_opt: ["no-new-privileges:true"]
+    networks: [internal]
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    secrets: [db_password, app_password]
+    environment:
+      PGHOST: db
+      PGUSER: financehub
+      PGDATABASE: financehub
+      PGPORT: 5432
+    depends_on:
+      db: {condition: service_healthy}
+    networks: [internal]
+    restart: "no"
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: financehub_app
+      PGDATABASE: financehub
+    secrets: [app_password, master_key]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: [/tmp]
+    networks: [internal]
+  backup:
+    profiles: ["tools"]
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    secrets: [db_password, backup_key]
+    environment:
+      PGHOST: db
+    depends_on:
+      db: {condition: service_healthy}
+    volumes:
+      - ./backups:/backups
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    networks: [internal]
+  web:
+    build: .
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      PGUSER: financehub_app
+      PGDATABASE: financehub
+      PGPORT: 5432
+      NODE_ENV: production
+      APP_ORIGIN: http://localhost:${APP_PORT:-3000}
+    secrets: [app_password, master_key, setup_code]
+    ports: ["127.0.0.1:${APP_PORT:-3000}:3000"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 3
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: [/tmp]
+    networks: [internal]
+volumes:
+  db_data:
+networks:
+  internal:
+    driver: bridge
+secrets:
+  db_password:
+    file: ./secrets/db_password
+  app_password:
+    file: ./secrets/app_password
+  master_key:
+    file: ./secrets/master_key
+  setup_code:
+    file: ./secrets/setup_code
+  backup_key:
+    file: ./secrets/backup_key

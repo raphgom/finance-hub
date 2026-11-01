@@ -1,0 +1,48 @@
+name: Galeria • screenshots reais da demo
+on:
+  workflow_dispatch:
+    inputs:
+      publish_images:
+        description: 'Publicar capturas fictícias diretamente no repositório?'
+        type: boolean
+        required: true
+        default: false
+permissions:
+  contents: write
+jobs:
+  gallery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Dependências da aplicação e navegador
+        run: |
+          npm install --no-audit --no-fund
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Inicializar demo fictícia
+        run: bash scripts/financehub.sh demo
+      - name: Capturar telas com Playwright
+        run: node scripts/capture-demo.mjs
+      - name: Disponibilizar imagens da execução
+        uses: actions/upload-artifact@v4
+        with:
+          name: finance-hub-demo-gallery
+          path: docs/screenshots/generated/*.png
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publicar galeria no GitHub (somente se explicitamente solicitado)
+        if: ${{ inputs.publish_images }}
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots/generated/
+          git diff --cached --quiet || git commit -m "docs: update real demo dashboard screenshots"
+          git push origin HEAD:${{ github.ref_name }}
+      - name: Logs sanitizados de diagnóstico
+        if: failure()
+        run: docker compose --ansi never -p financehub-demo -f compose.yaml -f compose.demo.yaml logs --no-color --tail=100 web migrate demo-seed db || true

@@ -1,0 +1,36 @@
+# Dependências e compilação
+node_modules/
+.next/
+*.tsbuildinfo
+coverage/
+playwright-report/
+test-results/
+# Dados privados/instalação (NUNCA publicar)
+secrets/
+backups/
+data/
+volumes/
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.bak
+*.backup
+*.key
+*.pem
+*.pfx
+*.p12
+*.kdbx
+*.zip
+*.tar
+*.tar.gz
+# Ambiente e sistema
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.npmrc
+*.log
